@@ -20,6 +20,7 @@
 #define KEEPASSX_DATABASEWIDGET_H
 
 #include <QFileSystemWatcher>
+#include <QListView>
 #include <QStackedWidget>
 
 #include "DatabaseOpenDialog.h"
@@ -27,6 +28,7 @@
 #include "gui/MessageWidget.h"
 #include "gui/csvImport/CsvImportWizard.h"
 #include "gui/entry/EntryModel.h"
+#include "gui/tag/TagModel.h"
 
 class DatabaseOpenWidget;
 class KeePass1OpenWidget;
@@ -176,6 +178,7 @@ public slots:
     void copyURL();
     void copyNotes();
     void copyAttribute(QAction* action);
+    void filterByTag(const QModelIndex& index);
     void showTotp();
     void showTotpKeyQrCode();
     void copyTotp();
@@ -262,6 +265,7 @@ private:
     void openDatabaseFromEntry(const Entry* entry, bool inBackground = true);
     void performIconDownloads(const QList<Entry*>& entries, bool force = false, bool downloadInBackground = false);
     bool performSave(QString& errorMessage, const QString& fileName = {});
+    void restoreTagSidePanelSelection();
 
     QSharedPointer<Database> m_db;
 
@@ -282,6 +286,7 @@ private:
     QPointer<KeePass1OpenWidget> m_keepass1OpenWidget;
     QPointer<OpVaultOpenWidget> m_opVaultOpenWidget;
     QPointer<GroupView> m_groupView;
+    QPointer<QListView> m_tagView;
     QPointer<EntryView> m_entryView;
 
     QScopedPointer<Group> m_newGroup;
@@ -297,6 +302,9 @@ private:
     QScopedPointer<EntrySearcher> m_entrySearcher;
     QString m_lastSearchText;
     bool m_searchLimitGroup;
+
+    // Tag filtering state
+    QString m_lastTagSelection;
 
     // Autoreload
     bool m_blockAutoSave;
