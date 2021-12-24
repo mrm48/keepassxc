@@ -193,7 +193,6 @@ DatabaseWidget::DatabaseWidget(QSharedPointer<Database> db, QWidget* parent)
             m_previewView->setGroup(groupView()->currentGroup());
         }
     });
-    connect(m_groupView, &GroupView::groupSelectionChanged, this, [&](){qobject_cast<TagModel*>(m_tagView->model())->setGroup(currentGroup());});
     connect(m_entryView, SIGNAL(entryActivated(Entry*,EntryModel::ModelColumn)),
         SLOT(entryActivationSignalReceived(Entry*,EntryModel::ModelColumn)));
     connect(m_entryView, SIGNAL(entrySelectionChanged(Entry*)), SLOT(onEntryChanged(Entry*)));
@@ -402,6 +401,7 @@ void DatabaseWidget::replaceDatabase(QSharedPointer<Database> db)
     m_db = std::move(db);
     connectDatabaseSignals();
     m_groupView->changeDatabase(m_db);
+    m_tagView->setModel(new TagModel(m_db->rootGroup()));
 
     // Restore the new parent group pointer, if not found default to the root group
     // this prevents data loss when merging a database while creating a new entry
@@ -1495,7 +1495,6 @@ void DatabaseWidget::onEntryChanged(Entry* entry)
 {
     if (entry) {
         m_previewView->setEntry(entry);
-        static_cast<TagModel*>(m_tagView->model())->findTags();
         restoreTagSidePanelSelection();
     }
 
