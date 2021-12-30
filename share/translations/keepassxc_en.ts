@@ -2886,6 +2886,14 @@ Would you like to correct it?</source>
         <source>Edit Entry</source>
         <translation type="unfinished"></translation>
     </message>
+    <message>
+        <source>Tags:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Tags list</source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>EditEntryWidgetSSHAgent</name>
@@ -3867,6 +3875,14 @@ Would you like to overwrite the existing attachment?</source>
     </message>
     <message>
         <source>Default Sequence</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Tags</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Tags list</source>
         <translation type="unfinished"></translation>
     </message>
 </context>

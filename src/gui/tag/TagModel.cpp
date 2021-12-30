@@ -29,11 +29,11 @@ TagModel::TagModel(Group* g, QObject* parent)
 // TODO: MOVE to entry
 QStringList TagModel::entryTags(const Entry* entry)
 {
-    if(entry!=nullptr) {
-    QRegExp rx("(\\ |\\,|\\.|\\:|\\t|\\;)");
-    auto entryTags = entry->tags().split(rx);
-    entryTags.removeAll(QString(""));
-    return entryTags;
+    if (entry != nullptr) {
+        QRegExp rx("(\\ |\\,|\\.|\\:|\\t|\\;)");
+        auto entryTags = entry->tags().split(rx);
+        entryTags.removeAll(QString(""));
+        return entryTags;
     }
     return QStringList();
 }
@@ -50,7 +50,7 @@ void TagModel::findTags()
     QSet<QString> s;
     s.insert("");
     if (m_group != nullptr) {
-        for (const auto* group: m_group->groupsRecursive(true)) {
+        for (const auto* group : m_group->groupsRecursive(true)) {
             for (const auto entry : group->entries()) {
                 for (auto tag : entryTags(entry)) {
                     s.insert(tag);
