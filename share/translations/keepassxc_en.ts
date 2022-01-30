@@ -453,7 +453,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>Specifies the database backup file location. Occurences of &quot;{DB_FILENAME}&quot; are replaced with the filename of the saved database without extension. {TIME:&lt;format&gt;} is replaced with the backup time, see https://doc.qt.io/qt-5/qdatetime.html#toString. &lt;format&gt; defaults to format string &quot;dd_MM_yyyy_hh-mm-ss&quot;.</source>
+        <source>Specifies the database backup file location. Occurrences of &quot;{DB_FILENAME}&quot; are replaced with the filename of the saved database without extension. {TIME:&lt;format&gt;} is replaced with the backup time, see https://doc.qt.io/qt-5/qdatetime.html#toString. &lt;format&gt; defaults to format string &quot;dd_MM_yyyy_hh-mm-ss&quot;.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -1343,20 +1343,12 @@ Do you want to delete the entry?
         <translation>Error while reading the database: %1</translation>
     </message>
     <message>
-        <source>File cannot be written as it is opened in read-only mode.</source>
-        <translation>File cannot be written as it is opened in read-only mode.</translation>
-    </message>
-    <message>
         <source>%1
 Backup database located at %2</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Could not save, database does not point to a valid file.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Could not save, database file is read-only.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -2209,11 +2201,6 @@ This is definitely a bug, please report it to the developers.</translation>
         <translation>%1 [Locked]</translation>
     </message>
     <message>
-        <source>%1 [Read-only]</source>
-        <comment>Database tab name modifier</comment>
-        <translation>%1 [Read-only]</translation>
-    </message>
-    <message>
         <source>Failed to open %1. It either does not exist or is not accessible.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -2371,10 +2358,6 @@ Disable safe saves and try again?</translation>
         <translation type="unfinished">Writing the database failed: %1</translation>
     </message>
     <message>
-        <source>This database is opened in read-only mode. Autosave is disabled.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Save database backup</source>
         <translation type="unfinished"></translation>
     </message>
@@ -2396,6 +2379,10 @@ Disable safe saves and try again?</translation>
     </message>
     <message>
         <source>Perform Auto-Type into the previously active window?</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Database Tags</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -2884,6 +2871,14 @@ Would you like to correct it?</source>
     </message>
     <message>
         <source>Edit Entry</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Tags:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Tags list</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -3867,6 +3862,14 @@ Would you like to overwrite the existing attachment?</source>
     </message>
     <message>
         <source>Default Sequence</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Tags</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Tags list</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -8498,6 +8501,21 @@ Please consider generating a new key file.</source>
     </message>
     <message>
         <source>Conflicting export target path %1 in %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>TagModel</name>
+    <message>
+        <source>All</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Expired</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Weak Passwords</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
