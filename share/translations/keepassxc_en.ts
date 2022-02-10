@@ -460,6 +460,22 @@
         <source>{DB_FILENAME}.old.kdbx</source>
         <translation type="unfinished"></translation>
     </message>
+    <message>
+        <source>On database unlock, show entries that </source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source> days</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>are expired</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>will expire within </source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>ApplicationSettingsWidgetSecurity</name>
@@ -639,6 +655,10 @@
     <message>
         <source>Default sequence</source>
         <translation>Default sequence</translation>
+    </message>
+    <message>
+        <source>(empty)</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -2383,6 +2403,14 @@ Disable safe saves and try again?</translation>
     </message>
     <message>
         <source>Database Tags</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Expired entries</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Entries expiring within %1 days</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
