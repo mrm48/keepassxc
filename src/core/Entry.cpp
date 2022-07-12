@@ -192,8 +192,10 @@ QString Entry::tags() const
 
 QStringList Entry::tagList() const
 {
-    static QRegExp rx("(\\ |\\,|\\.|\\:|\\t|\\;)");
-    return tags().split(rx, QString::SkipEmptyParts);
+    static QRegExp rx("(\\,|\\t|\\;)");
+    auto taglist = tags().split(rx, QString::SkipEmptyParts);
+    std::sort(taglist.begin(), taglist.end());
+    return taglist;
 }
 
 const TimeInfo& Entry::timeInfo() const
@@ -863,7 +865,7 @@ bool Entry::equals(const Entry* other, CompareItemOptions options) const
 
 Entry* Entry::clone(CloneFlags flags) const
 {
-    Entry* entry = new Entry();
+    auto entry = new Entry();
     entry->setUpdateTimeinfo(false);
     if (flags & CloneNewUuid) {
         entry->m_uuid = QUuid::createUuid();
@@ -1137,7 +1139,7 @@ QString Entry::resolveReferencePlaceholderRecursive(const QString& placeholder, 
     // using format from http://keepass.info/help/base/fieldrefs.html at the time of writing
 
     QRegularExpressionMatch match = EntryAttributes::matchReference(placeholder);
-    if (!match.hasMatch()) {
+    if (!match.hasMatch() || !m_group || !m_group->database()) {
         return placeholder;
     }
 
@@ -1147,8 +1149,6 @@ QString Entry::resolveReferencePlaceholderRecursive(const QString& placeholder, 
 
     const EntryReferenceType searchInType = Entry::referenceType(searchIn);
 
-    Q_ASSERT(m_group);
-    Q_ASSERT(m_group->database());
     const Entry* refEntry = m_group->database()->rootGroup()->findEntryBySearchTerm(searchText, searchInType);
 
     if (refEntry) {

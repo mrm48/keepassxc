@@ -18,6 +18,7 @@
 #include "DatabaseTabWidget.h"
 
 #include <QFileInfo>
+#include <QTabBar>
 
 #include "autotype/AutoType.h"
 #include "core/Tools.h"
@@ -26,7 +27,6 @@
 #include "gui/DatabaseOpenDialog.h"
 #include "gui/DatabaseWidget.h"
 #include "gui/DatabaseWidgetStateSync.h"
-#include "gui/DragTabBar.h"
 #include "gui/FileDialog.h"
 #include "gui/HtmlExporter.h"
 #include "gui/MessageBox.h"
@@ -42,7 +42,9 @@ DatabaseTabWidget::DatabaseTabWidget(QWidget* parent)
     , m_dbWidgetPendingLock(nullptr)
     , m_databaseOpenDialog(new DatabaseOpenDialog(this))
 {
-    auto* tabBar = new DragTabBar(this);
+    auto* tabBar = new QTabBar(this);
+    tabBar->setAcceptDrops(true);
+    tabBar->setChangeCurrentOnDrag(true);
     setTabBar(tabBar);
     setDocumentMode(true);
 
@@ -52,7 +54,7 @@ DatabaseTabWidget::DatabaseTabWidget(QWidget* parent)
     connect(this, SIGNAL(activeDatabaseChanged(DatabaseWidget*)),
             m_dbWidgetStateSync, SLOT(setActive(DatabaseWidget*)));
     connect(autoType(), SIGNAL(globalAutoTypeTriggered(const QString&)), SLOT(performGlobalAutoType(const QString&)));
-    connect(autoType(), SIGNAL(autotypePerformed()), SLOT(relockPendingDatabase()));
+    connect(autoType(), SIGNAL(autotypeRetypeTimeout()), SLOT(relockPendingDatabase()));
     connect(autoType(), SIGNAL(autotypeRejected()), SLOT(relockPendingDatabase()));
     connect(m_databaseOpenDialog.data(), &DatabaseOpenDialog::dialogFinished,
             this, &DatabaseTabWidget::handleDatabaseUnlockDialogFinished);
@@ -200,6 +202,7 @@ void DatabaseTabWidget::lockAndSwitchToFirstUnlockedDatabase(int index)
         for (int i = 0, c = count(); i < c; ++i) {
             if (!databaseWidgetFromIndex(i)->isLocked()) {
                 setCurrentIndex(i);
+                emitActiveDatabaseChanged();
                 return;
             }
         }

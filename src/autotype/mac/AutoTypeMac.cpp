@@ -23,7 +23,6 @@
 
 #include <ApplicationServices/ApplicationServices.h>
 
-#define MAX_WINDOW_TITLE_LENGTH 1024
 #define INVALID_KEYCODE 0xFFFF
 
 AutoTypePlatformMac::AutoTypePlatformMac()
@@ -60,7 +59,15 @@ QStringList AutoTypePlatformMac::windowTitles()
                 continue;
             }
 
-            QString title = windowTitle(window);
+            QString title = windowStringProperty(window, kCGWindowName);
+            QString owner = windowStringProperty(window, kCGWindowOwnerName);
+
+            // Audio recording injects a "StatusIndicator" window owned by the "Window Server" process
+            // into to list in macOS 12.2 (see: https://github.com/keepassxreboot/keepassxc/issues/7418).
+            if (title == "StatusIndicator" && owner == "Window Server") {
+                continue;
+            }
+
             if (!title.isEmpty()) {
                 list.append(title);
             }
@@ -95,8 +102,16 @@ QString AutoTypePlatformMac::activeWindowTitle()
         for (CFIndex i = 0; i < count; i++) {
             CFDictionaryRef window = static_cast<CFDictionaryRef>(::CFArrayGetValueAtIndex(windowList, i));
             if (windowLayer(window) == 0) {
+                title = windowStringProperty(window, kCGWindowName);
+                QString owner = windowStringProperty(window, kCGWindowOwnerName);
+
+                // Audio recording injects a "StatusIndicator" window owned by the "Window Server" process
+                // into to list in macOS 12.2 (see: https://github.com/keepassxreboot/keepassxc/issues/7418).
+                if (title == "StatusIndicator" && owner == "Window Server") {
+                    continue;
+                }
+
                 // First toplevel window in list (front to back order)
-                title = windowTitle(window);
                 if (!title.isEmpty()) {
                     break;
                 }
@@ -157,7 +172,7 @@ void AutoTypePlatformMac::sendChar(const QChar& ch, bool isKeyDown)
 // Send key code to active window
 // see: Quartz Event Services
 //
-void AutoTypePlatformMac::sendKey(Qt::Key key, bool isKeyDown, Qt::KeyboardModifiers modifiers = 0)
+void AutoTypePlatformMac::sendKey(Qt::Key key, bool isKeyDown, Qt::KeyboardModifiers modifiers)
 {
     uint16 keyCode = macUtils()->qtToNativeKeyCode(key);
     if (keyCode == INVALID_KEYCODE) {
@@ -190,20 +205,20 @@ int AutoTypePlatformMac::windowLayer(CFDictionaryRef window)
 }
 
 //
-// Get window title
+// Get window string property
 //
-QString AutoTypePlatformMac::windowTitle(CFDictionaryRef window)
+QString AutoTypePlatformMac::windowStringProperty(CFDictionaryRef window, CFStringRef propertyRef)
 {
-    char buffer[MAX_WINDOW_TITLE_LENGTH];
-    QString title;
+    char buffer[1024];
+    QString value;
 
-    CFStringRef titleRef = static_cast<CFStringRef>(::CFDictionaryGetValue(window, kCGWindowName));
-    if (titleRef != nullptr
-            && ::CFStringGetCString(titleRef, buffer, MAX_WINDOW_TITLE_LENGTH, kCFStringEncodingUTF8)) {
-        title = QString::fromUtf8(buffer);
+    CFStringRef valueRef = static_cast<CFStringRef>(::CFDictionaryGetValue(window, propertyRef));
+    if (valueRef != nullptr
+            && ::CFStringGetCString(valueRef, buffer, 1024, kCFStringEncodingUTF8)) {
+        value = QString::fromUtf8(buffer);
     }
 
-    return title;
+    return value;
 }
 
 //
@@ -223,38 +238,22 @@ AutoTypeAction::Result AutoTypeExecutorMac::execBegin(const AutoTypeBegin* actio
 
 AutoTypeAction::Result AutoTypeExecutorMac::execType(const AutoTypeKey* action)
 {
-    if (action->modifiers & Qt::ShiftModifier) {
-        m_platform->sendKey(Qt::Key_Shift, true);
-    }
-    if (action->modifiers & Qt::ControlModifier) {
-        m_platform->sendKey(Qt::Key_Control, true);
-    }
-    if (action->modifiers & Qt::AltModifier) {
-        m_platform->sendKey(Qt::Key_Alt, true);
-    }
-    if (action->modifiers & Qt::MetaModifier) {
-        m_platform->sendKey(Qt::Key_Meta, true);
-    }
+
 
     if (action->key != Qt::Key_unknown) {
-        m_platform->sendKey(action->key, true);
-        m_platform->sendKey(action->key, false);
+        m_platform->sendKey(action->key, true, action->modifiers);
+        m_platform->sendKey(action->key, false, action->modifiers);
     } else {
-        m_platform->sendChar(action->character, true);
-        m_platform->sendChar(action->character, false);
-    }
-
-    if (action->modifiers & Qt::ShiftModifier) {
-        m_platform->sendKey(Qt::Key_Shift, false);
-    }
-    if (action->modifiers & Qt::ControlModifier) {
-        m_platform->sendKey(Qt::Key_Control, false);
-    }
-    if (action->modifiers & Qt::AltModifier) {
-        m_platform->sendKey(Qt::Key_Alt, false);
-    }
-    if (action->modifiers & Qt::MetaModifier) {
-        m_platform->sendKey(Qt::Key_Meta, false);
+        if (action->modifiers != Qt::NoModifier) {
+            // If we have modifiers set than we intend to send a key sequence
+            // convert to uppercase to align with Qt Key mappings
+            int ch = action->character.toUpper().toLatin1();
+            m_platform->sendKey(static_cast<Qt::Key>(ch), true, action->modifiers);
+            m_platform->sendKey(static_cast<Qt::Key>(ch), false, action->modifiers);
+        } else {
+            m_platform->sendChar(action->character, true);
+            m_platform->sendChar(action->character, false);
+        }
     }
 
     Tools::sleep(execDelayMs);

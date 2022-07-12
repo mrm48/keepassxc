@@ -37,7 +37,6 @@ param(
     [Parameter(ParameterSetName = "merge", Mandatory, Position = 1)]
     [Parameter(ParameterSetName = "build", Mandatory, Position = 1)]
     [Parameter(ParameterSetName = "sign", Mandatory, Position = 1)]
-    [ValidatePattern("^[0-9]\.[0-9]\.[0-9]$")]
     [string] $Version,
 
     [Parameter(ParameterSetName = "build", Mandatory)]
@@ -84,8 +83,6 @@ param(
     [string] $Tag,
     [Parameter(ParameterSetName = "merge")]
     [string] $SourceBranch,
-    [Parameter(ParameterSetName = "merge")]
-    [string] $TargetBranch = "master",
     [Parameter(ParameterSetName = "build")]
     [string] $VSToolChain,
     [Parameter(ParameterSetName = "merge")]
@@ -132,11 +129,6 @@ function Test-VersionInFiles {
     if (!(Select-String "$SourceDir\share\linux\org.keepassxc.KeePassXC.appdata.xml" `
                 -pattern "<release version=`"$Version`" date=`"\d{4}-\d{2}-\d{2}`">" -Quiet)) {
         throw "share/linux/org.keepassxc.KeePassXC.appdata.xml does not contain a section for $Version."
-    }
-
-    # Check Snapcraft
-    if (!(Select-String "$SourceDir\snap\snapcraft.yaml" -pattern "version: $Version" -Quiet)) {
-        throw "snap/snapcraft.yaml has not been updated to $Version."
     }
 }
 
@@ -263,7 +255,7 @@ if ($ExtraPath) {
 $SourceDir = (Resolve-Path $SourceDir).Path
 
 # Check format of -Version
-if ($Version -notmatch "^\d+\.\d+\.\d+$") {
+if ($Version -notmatch "^\d+\.\d+\.\d+(-Beta\d*)?$") {
     throw "Invalid format for -Version input"
 }
 
@@ -285,8 +277,8 @@ if ($Merge) {
         $SourceBranch = & git branch --show-current
     }
 
-    if ($SourceBranch -notmatch "^release/.*|develop$") {
-        throw "Must be on develop or a release/* branch to continue merging."
+    if ($SourceBranch -notmatch "^release/.*$") {
+        throw "Must be on a release/* branch to continue."
     }
 
     # Update translation files
@@ -320,21 +312,16 @@ if ($Merge) {
         }
     }
 
-    Write-Host "Checking out target branch '$TargetBranch'..."
-    Invoke-Cmd "git" "checkout `"$TargetBranch`"" -quiet
-
-    Write-Host "Merging '$SourceBranch' into '$TargetBranch'..."
-    Invoke-Cmd "git" "merge `"$SourceBranch`" --no-ff -m `"Release $Version`" -m `"$Changelog`" `"$SourceBranch`" -S" -quiet
-
     Write-Host "Creating tag for '$Version'..."
     Invoke-Cmd "git" "tag -a `"$Version`" -m `"Release $Version`" -m `"$Changelog`" -s" -quiet
+
+    Write-Host "Moving latest tag..."
+    Invoke-Cmd "git" "tag -f -a `"latest`" -m `"Latest stable release`" -s" -quiet
 
     Write-Host "All done!"
     Write-Host "Please merge the release branch back into the develop branch now and then push your changes."
     Write-Host "Don't forget to also push the tags using 'git push --tags'."
 } elseif ($Build) {
-    $OutDir = (Resolve-Path $OutDir).Path
-    $BuildDir = "$OutDir\build-release"
     $Vcpkg = (Resolve-Path $Vcpkg).Path
 
     # Find Visual Studio and establish build environment
@@ -356,7 +343,7 @@ if ($Merge) {
             Remove-Item $OutDir -Recurse
         }
         
-        if ($Version -match "-beta\\d+$") {
+        if ($Version -match "-beta\d*$") {
             $CMakeOptions = "$CMakeOptions -DKEEPASSXC_BUILD_TYPE=PreRelease"
         } else {
             $CMakeOptions = "$CMakeOptions -DKEEPASSXC_BUILD_TYPE=Release"
@@ -372,6 +359,9 @@ if ($Merge) {
 
     # Create directories
     New-Item "$OutDir" -ItemType Directory -Force | Out-Null
+    $OutDir = (Resolve-Path $OutDir).Path
+
+    $BuildDir = "$OutDir\build-release"
     New-Item "$BuildDir" -ItemType Directory -Force | Out-Null
 
     # Enter build directory

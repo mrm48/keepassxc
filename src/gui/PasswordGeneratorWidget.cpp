@@ -1,6 +1,6 @@
 /*
  *  Copyright (C) 2013 Felix Geyer <debfx@fobos.de>
- *  Copyright (C) 2021 KeePassXC Team <team@keepassxc.org>
+ *  Copyright (C) 2022 KeePassXC Team <team@keepassxc.org>
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -56,7 +56,7 @@ PasswordGeneratorWidget::PasswordGeneratorWidget(QWidget* parent)
     connect(shortcut, &QShortcut::activated, this, [this] { applyPassword(); });
 
     connect(m_ui->editNewPassword, SIGNAL(textChanged(QString)), SLOT(updateButtonsEnabled(QString)));
-    connect(m_ui->editNewPassword, SIGNAL(textChanged(QString)), SLOT(updatePasswordStrength(QString)));
+    connect(m_ui->editNewPassword, SIGNAL(textChanged(QString)), SLOT(updatePasswordStrength()));
     connect(m_ui->buttonAdvancedMode, SIGNAL(toggled(bool)), SLOT(setAdvancedMode(bool)));
     connect(m_ui->buttonAddHex, SIGNAL(clicked()), SLOT(excludeHexChars()));
     connect(m_ui->editAdditionalChars, SIGNAL(textChanged(QString)), SLOT(updateGenerator()));
@@ -83,7 +83,7 @@ PasswordGeneratorWidget::PasswordGeneratorWidget(QWidget* parent)
     // set font size of password quality and entropy labels dynamically to 80% of
     // the default font size, but make it no smaller than 8pt
     QFont defaultFont;
-    int smallerSize = static_cast<int>(defaultFont.pointSize() * 0.8f);
+    auto smallerSize = static_cast<int>(defaultFont.pointSize() * 0.8f);
     if (smallerSize >= 8) {
         defaultFont.setPointSize(smallerSize);
         m_ui->entropyLabel->setFont(defaultFont);
@@ -115,9 +115,7 @@ PasswordGeneratorWidget::PasswordGeneratorWidget(QWidget* parent)
     loadSettings();
 }
 
-PasswordGeneratorWidget::~PasswordGeneratorWidget()
-{
-}
+PasswordGeneratorWidget::~PasswordGeneratorWidget() = default;
 
 void PasswordGeneratorWidget::closeEvent(QCloseEvent* event)
 {
@@ -253,15 +251,11 @@ void PasswordGeneratorWidget::regeneratePassword()
 {
     if (m_ui->tabWidget->currentIndex() == Password) {
         if (m_passwordGenerator->isValid()) {
-            QString password = m_passwordGenerator->generatePassword();
-            m_ui->editNewPassword->setText(password);
-            updatePasswordStrength(password);
+            m_ui->editNewPassword->setText(m_passwordGenerator->generatePassword());
         }
     } else {
         if (m_dicewareGenerator->isValid()) {
-            QString password = m_dicewareGenerator->generatePassphrase();
-            m_ui->editNewPassword->setText(password);
-            updatePasswordStrength(password);
+            m_ui->editNewPassword->setText(m_dicewareGenerator->generatePassphrase());
         }
     }
 }
@@ -274,26 +268,58 @@ void PasswordGeneratorWidget::updateButtonsEnabled(const QString& password)
     m_ui->buttonCopy->setEnabled(!password.isEmpty());
 }
 
-void PasswordGeneratorWidget::updatePasswordStrength(const QString& password)
+void PasswordGeneratorWidget::updatePasswordStrength()
 {
-    PasswordHealth health(password);
+    // Calculate the password / passphrase health
+    PasswordHealth passwordHealth(0);
     if (m_ui->tabWidget->currentIndex() == Diceware) {
-        // Diceware estimates entropy differently
-        health = PasswordHealth(m_dicewareGenerator->estimateEntropy());
-
-        m_ui->charactersInPassphraseLabel->setText(QString::number(password.length()));
+        passwordHealth.init(m_dicewareGenerator->estimateEntropy());
+        m_ui->charactersInPassphraseLabel->setText(QString::number(m_ui->editNewPassword->text().length()));
+    } else {
+        passwordHealth = PasswordHealth(m_ui->editNewPassword->text());
     }
 
-    m_ui->entropyLabel->setText(tr("Entropy: %1 bit").arg(QString::number(health.entropy(), 'f', 2)));
+    // Update the entropy text labels
+    m_ui->entropyLabel->setText(tr("Entropy: %1 bit").arg(QString::number(passwordHealth.entropy(), 'f', 2)));
+    m_ui->entropyProgressBar->setValue(std::min(int(passwordHealth.entropy()), m_ui->entropyProgressBar->maximum()));
 
-    m_ui->entropyProgressBar->setValue(std::min(int(health.entropy()), m_ui->entropyProgressBar->maximum()));
+    // Update the visual strength meter
+    QString style = m_ui->entropyProgressBar->styleSheet();
+    QRegularExpression re("(QProgressBar::chunk\\s*\\{.*?background-color:)[^;]+;",
+                          QRegularExpression::CaseInsensitiveOption | QRegularExpression::DotMatchesEverythingOption);
+    style.replace(re, "\\1 %1;");
 
-    colorStrengthIndicator(health);
+    StateColorPalette statePalette;
+    switch (passwordHealth.quality()) {
+    case PasswordHealth::Quality::Bad:
+    case PasswordHealth::Quality::Poor:
+        m_ui->entropyProgressBar->setStyleSheet(
+            style.arg(statePalette.color(StateColorPalette::HealthCritical).name()));
+        m_ui->strengthLabel->setText(tr("Password Quality: %1").arg(tr("Poor", "Password quality")));
+        break;
+
+    case PasswordHealth::Quality::Weak:
+        m_ui->entropyProgressBar->setStyleSheet(style.arg(statePalette.color(StateColorPalette::HealthBad).name()));
+        m_ui->strengthLabel->setText(tr("Password Quality: %1").arg(tr("Weak", "Password quality")));
+        break;
+
+    case PasswordHealth::Quality::Good:
+        m_ui->entropyProgressBar->setStyleSheet(style.arg(statePalette.color(StateColorPalette::HealthOk).name()));
+        m_ui->strengthLabel->setText(tr("Password Quality: %1").arg(tr("Good", "Password quality")));
+        break;
+
+    case PasswordHealth::Quality::Excellent:
+        m_ui->entropyProgressBar->setStyleSheet(
+            style.arg(statePalette.color(StateColorPalette::HealthExcellent).name()));
+        m_ui->strengthLabel->setText(tr("Password Quality: %1").arg(tr("Excellent", "Password quality")));
+        break;
+    }
 }
 
 void PasswordGeneratorWidget::applyPassword()
 {
     saveSettings();
+    m_passwordGenerated = true;
     emit appliedPassword(m_ui->editNewPassword->text());
     emit closed();
 }
@@ -339,6 +365,11 @@ void PasswordGeneratorWidget::setPasswordVisible(bool visible)
 bool PasswordGeneratorWidget::isPasswordVisible() const
 {
     return m_ui->editNewPassword->isPasswordVisible();
+}
+
+bool PasswordGeneratorWidget::isPasswordGenerated() const
+{
+    return m_passwordGenerated;
 }
 
 void PasswordGeneratorWidget::deleteWordList()
@@ -465,41 +496,6 @@ void PasswordGeneratorWidget::excludeHexChars()
     updateGenerator();
 }
 
-void PasswordGeneratorWidget::colorStrengthIndicator(const PasswordHealth& health)
-{
-    // Take the existing stylesheet and convert the text and background color to arguments
-    QString style = m_ui->entropyProgressBar->styleSheet();
-    QRegularExpression re("(QProgressBar::chunk\\s*\\{.*?background-color:)[^;]+;",
-                          QRegularExpression::CaseInsensitiveOption | QRegularExpression::DotMatchesEverythingOption);
-    style.replace(re, "\\1 %1;");
-
-    StateColorPalette statePalette;
-    switch (health.quality()) {
-    case PasswordHealth::Quality::Bad:
-    case PasswordHealth::Quality::Poor:
-        m_ui->entropyProgressBar->setStyleSheet(
-            style.arg(statePalette.color(StateColorPalette::HealthCritical).name()));
-        m_ui->strengthLabel->setText(tr("Password Quality: %1").arg(tr("Poor", "Password quality")));
-        break;
-
-    case PasswordHealth::Quality::Weak:
-        m_ui->entropyProgressBar->setStyleSheet(style.arg(statePalette.color(StateColorPalette::HealthBad).name()));
-        m_ui->strengthLabel->setText(tr("Password Quality: %1").arg(tr("Weak", "Password quality")));
-        break;
-
-    case PasswordHealth::Quality::Good:
-        m_ui->entropyProgressBar->setStyleSheet(style.arg(statePalette.color(StateColorPalette::HealthOk).name()));
-        m_ui->strengthLabel->setText(tr("Password Quality: %1").arg(tr("Good", "Password quality")));
-        break;
-
-    case PasswordHealth::Quality::Excellent:
-        m_ui->entropyProgressBar->setStyleSheet(
-            style.arg(statePalette.color(StateColorPalette::HealthExcellent).name()));
-        m_ui->strengthLabel->setText(tr("Password Quality: %1").arg(tr("Excellent", "Password quality")));
-        break;
-    }
-}
-
 PasswordGenerator::CharClasses PasswordGeneratorWidget::charClasses()
 {
     PasswordGenerator::CharClasses classes;
@@ -580,7 +576,7 @@ void PasswordGeneratorWidget::updateGenerator()
         if (m_ui->buttonAdvancedMode->isChecked()) {
             m_passwordGenerator->setCharClasses(classes);
             m_passwordGenerator->setCustomCharacterSet(m_ui->editAdditionalChars->text());
-            m_passwordGenerator->setCustomCharacterSet(m_ui->editExcludedChars->text());
+            m_passwordGenerator->setExcludedCharacterSet(m_ui->editExcludedChars->text());
         } else {
             m_passwordGenerator->setCharClasses(classes);
         }

@@ -19,7 +19,11 @@
 
 #include "config-keepassx.h"
 
+#include <QDir>
 #include <QStandardPaths>
+#if defined(KEEPASSXC_DIST_SNAP)
+#include <QProcessEnvironment>
+#endif
 
 namespace BrowserShared
 {
@@ -29,10 +33,21 @@ namespace BrowserShared
 #if defined(KEEPASSXC_DIST_SNAP)
         return QProcessEnvironment::systemEnvironment().value("SNAP_USER_COMMON") + serverName;
 #elif defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
-        // Use XDG_RUNTIME_DIR instead of /tmp if it's available
+        // This returns XDG_RUNTIME_DIR or else a temporary subdirectory.
         QString path = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
-        return path.isEmpty() ? QStandardPaths::writableLocation(QStandardPaths::TempLocation) + serverName
-                              : path + serverName;
+
+        // Put the socket in a dedicated directory.
+        // This directory will be easily mountable by sandbox containers.
+        QString subPath = path + "/app/org.keepassxc.KeePassXC/";
+        QDir().mkpath(subPath);
+
+        QString socketPath = subPath + serverName;
+#ifndef KEEPASSXC_DIST_FLATPAK
+        // Create a symlink at the legacy location for backwards compatibility.
+        QFile::link(socketPath, path + serverName);
+#endif
+
+        return socketPath;
 #elif defined(Q_OS_WIN)
         // Windows uses named pipes
         return serverName + "_" + qgetenv("USERNAME");

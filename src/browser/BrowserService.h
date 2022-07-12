@@ -23,6 +23,8 @@
 #include "core/Entry.h"
 #include "gui/PasswordGeneratorWidget.h"
 
+class QLocalSocket;
+
 typedef QPair<QString, QString> StringPair;
 typedef QList<StringPair> StringPairList;
 
@@ -56,8 +58,12 @@ public:
     QJsonObject getDatabaseGroups();
     QJsonObject createNewGroup(const QString& groupName);
     QString getCurrentTotp(const QString& uuid);
-    void showPasswordGenerator(const QJsonObject& errorMessage, const QString& nonce);
-    void sendPassword(const QJsonObject& message);
+    void showPasswordGenerator(QLocalSocket* socket,
+                               const QString& nonce,
+                               const QString& publicKey,
+                               const QString& secretKey);
+    void sendPassword(QLocalSocket* socket, const QJsonObject& message);
+    bool isPasswordGeneratorRequested() const;
 
     void addEntry(const QString& dbid,
                   const QString& login,
@@ -93,11 +99,12 @@ public:
     static const QString OPTION_HIDE_ENTRY;
     static const QString OPTION_ONLY_HTTP_AUTH;
     static const QString OPTION_NOT_HTTP_AUTH;
+    static const QString OPTION_OMIT_WWW;
     static const QString ADDITIONAL_URL;
 
 signals:
     void requestUnlock();
-    void passwordGenerated(const QString& password, const QString& nonce);
+    void passwordGenerated(QLocalSocket* socket, const QString& password, const QString& nonce);
 
 public slots:
     void databaseLocked(DatabaseWidget* dbWidget);
@@ -105,7 +112,7 @@ public slots:
     void activeDatabaseChanged(DatabaseWidget* dbWidget);
 
 private slots:
-    void processClientMessage(const QJsonObject& message);
+    void processClientMessage(QLocalSocket* socket, const QJsonObject& message);
 
 private:
     enum Access
@@ -122,26 +129,29 @@ private:
         Hidden
     };
 
-    QList<Entry*>
-    searchEntries(const QSharedPointer<Database>& db, const QString& siteUrlStr, const QString& formUrlStr);
-    QList<Entry*> searchEntries(const QString& siteUrlStr, const QString& formUrlStr, const StringPairList& keyList);
-    QList<Entry*> sortEntries(QList<Entry*>& pwEntries, const QString& siteUrlStr, const QString& formUrlStr);
+    QList<Entry*> searchEntries(const QSharedPointer<Database>& db, const QString& siteUrl, const QString& formUrl);
+    QList<Entry*> searchEntries(const QString& siteUrl, const QString& formUrl, const StringPairList& keyList);
+    QList<Entry*> sortEntries(QList<Entry*>& pwEntries, const QString& siteUrl, const QString& formUrl);
     QList<Entry*> confirmEntries(QList<Entry*>& pwEntriesToConfirm,
-                                 const QString& siteUrlStr,
+                                 const QString& siteUrl,
                                  const QString& siteHost,
-                                 const QString& formUrlStr,
+                                 const QString& formUrl,
                                  const QString& realm,
                                  const bool httpAuth);
     QJsonObject prepareEntry(const Entry* entry);
     QJsonArray getChildrenFromGroup(Group* group);
     Access checkAccess(const Entry* entry, const QString& siteHost, const QString& formHost, const QString& realm);
     Group* getDefaultEntryGroup(const QSharedPointer<Database>& selectedDb = {});
-    int sortPriority(const QStringList& urls, const QString& siteUrlStr, const QString& formUrlStr);
+    int sortPriority(const QStringList& urls, const QString& siteUrl, const QString& formUrl);
     bool schemeFound(const QString& url);
     bool isIpAddress(const QString& host) const;
     bool removeFirstDomain(QString& hostname);
-    bool handleEntry(Entry* entry, const QString& url, const QString& submitUrl);
-    bool handleURL(const QString& entryUrl, const QString& siteUrlStr, const QString& formUrlStr);
+    bool
+    shouldIncludeEntry(Entry* entry, const QString& url, const QString& submitUrl, const bool omitWwwSubdomain = false);
+    bool handleURL(const QString& entryUrl,
+                   const QString& siteUrl,
+                   const QString& formUrl,
+                   const bool omitWwwSubdomain = false);
     QString getTopLevelDomainFromUrl(const QString& url) const;
     QString baseDomain(const QString& hostname) const;
     QSharedPointer<Database> getDatabase();
@@ -163,6 +173,7 @@ private:
 
     bool m_dialogActive;
     bool m_bringToFrontRequested;
+    bool m_passwordGeneratorRequested;
     WindowState m_prevWindowState;
     QUuid m_keepassBrowserUUID;
 

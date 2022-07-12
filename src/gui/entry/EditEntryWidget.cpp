@@ -131,6 +131,8 @@ EditEntryWidget::EditEntryWidget(QWidget* parent)
     connect(m_iconsWidget, SIGNAL(messageEditEntryDismiss()), SLOT(hideMessage()));
 
     m_editWidgetProperties->setCustomData(m_customData.data());
+
+    m_mainUi->passwordEdit->setQualityVisible(true);
 }
 
 EditEntryWidget::~EditEntryWidget()
@@ -220,7 +222,7 @@ void EditEntryWidget::openAutotypeHelp()
 void EditEntryWidget::setupAutoType()
 {
     m_autoTypeUi->setupUi(m_autoTypeWidget);
-    addPage(tr("Auto-Type"), icons()->icon("key-enter"), m_autoTypeWidget);
+    addPage(tr("Auto-Type"), icons()->icon("auto-type"), m_autoTypeWidget);
 
     m_autoTypeUi->openHelpButton->setIcon(icons()->icon("system-help"));
 
@@ -234,8 +236,6 @@ void EditEntryWidget::setupAutoType()
     connect(m_autoTypeUi->enableButton, SIGNAL(toggled(bool)), SLOT(updateAutoTypeEnabled()));
     connect(m_autoTypeUi->customSequenceButton, SIGNAL(toggled(bool)),
             m_autoTypeUi->sequenceEdit, SLOT(setEnabled(bool)));
-    connect(m_autoTypeUi->customSequenceButton, SIGNAL(toggled(bool)),
-            m_autoTypeUi->openHelpButton, SLOT(setEnabled(bool)));
     connect(m_autoTypeUi->openHelpButton, SIGNAL(clicked()), SLOT(openAutotypeHelp()));
     connect(m_autoTypeUi->customWindowSequenceButton, SIGNAL(toggled(bool)),
             m_autoTypeUi->windowSequenceEdit, SLOT(setEnabled(bool)));
@@ -443,6 +443,7 @@ void EditEntryWidget::setupEntryUpdate()
 #ifdef WITH_XC_NETWORKING
     connect(m_mainUi->urlEdit, SIGNAL(textChanged(QString)), this, SLOT(updateFaviconButtonEnable(QString)));
 #endif
+    connect(m_mainUi->tagsList, SIGNAL(tagsEdited()), this, SLOT(setModified()));
     connect(m_mainUi->expireCheck, SIGNAL(stateChanged(int)), this, SLOT(setModified()));
     connect(m_mainUi->expireDatePicker, SIGNAL(dateTimeChanged(QDateTime)), this, SLOT(setModified()));
     connect(m_mainUi->notesEdit, SIGNAL(textChanged()), this, SLOT(setModified()));
@@ -791,7 +792,7 @@ void EditEntryWidget::copyPublicKey()
 void EditEntryWidget::useExpiryPreset(QAction* action)
 {
     m_mainUi->expireCheck->setChecked(true);
-    TimeDelta delta = action->data().value<TimeDelta>();
+    auto delta = action->data().value<TimeDelta>();
     QDateTime now = Clock::currentDateTime();
     QDateTime expiryDateTime = now + delta;
     m_mainUi->expireDatePicker->setDateTime(expiryDateTime);
@@ -1575,7 +1576,8 @@ void EditEntryWidget::deleteAllHistoryEntries()
 QMenu* EditEntryWidget::createPresetsMenu()
 {
     auto* expirePresetsMenu = new QMenu(this);
-    expirePresetsMenu->addAction(tr("Tomorrow"))->setData(QVariant::fromValue(TimeDelta::fromDays(1)));
+    expirePresetsMenu->addAction(tr("%n hour(s)", nullptr, 12))->setData(QVariant::fromValue(TimeDelta::fromHours(12)));
+    expirePresetsMenu->addAction(tr("%n hour(s)", nullptr, 24))->setData(QVariant::fromValue(TimeDelta::fromHours(24)));
     expirePresetsMenu->addSeparator();
     expirePresetsMenu->addAction(tr("%n week(s)", nullptr, 1))->setData(QVariant::fromValue(TimeDelta::fromDays(7)));
     expirePresetsMenu->addAction(tr("%n week(s)", nullptr, 2))->setData(QVariant::fromValue(TimeDelta::fromDays(14)));

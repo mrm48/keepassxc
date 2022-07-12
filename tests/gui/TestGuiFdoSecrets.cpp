@@ -33,6 +33,7 @@
 #include "gui/FileDialog.h"
 #include "gui/MainWindow.h"
 #include "gui/MessageBox.h"
+#include "gui/PasswordWidget.h"
 #include "gui/wizard/NewDatabaseWizard.h"
 #include "util/FdoSecretsProxy.h"
 #include "util/TemporaryFile.h"
@@ -182,7 +183,7 @@ void TestGuiFdoSecrets::init()
     m_dbFile.reset(new TemporaryFile());
     // Write the temp storage to a temp database file for use in our tests
     VERIFY(m_dbFile->open());
-    COMPARE(m_dbFile->write(m_dbData), static_cast<qint64>((m_dbData.size())));
+    COMPARE(m_dbFile->write(m_dbData), static_cast<qint64>(m_dbData.size()));
     m_dbFile->close();
 
     // make sure window is activated or focus tests may fail
@@ -197,6 +198,12 @@ void TestGuiFdoSecrets::init()
     // by default expose the root group
     FdoSecrets::settings()->setExposedGroup(m_db, m_db->rootGroup()->uuid());
     VERIFY(m_dbWidget->save());
+
+    // enforce consistent default settings at the beginning
+    FdoSecrets::settings()->setUnlockBeforeSearch(false);
+    FdoSecrets::settings()->setShowNotification(false);
+    FdoSecrets::settings()->setConfirmAccessItem(false);
+    FdoSecrets::settings()->setEnabled(false);
 }
 
 // Every test ends with closing the temp database without saving
@@ -384,6 +391,62 @@ void TestGuiFdoSecrets::testServiceSearchBlockingUnlock()
         COMPARE(unlocked.size(), 1);
         auto item = getProxy<ItemProxy>(unlocked.first());
         DBUS_COMPARE(item->label(), title);
+    }
+}
+
+void TestGuiFdoSecrets::testServiceSearchBlockingUnlockMultiple()
+{
+    // setup: two databases, both locked, one with exposed db, the other not.
+
+    // add another database tab with a database with no exposed group
+    // to avoid modify the original, copy to a temp file first
+    QFile sourceDbFile(QStringLiteral(KEEPASSX_TEST_DATA_DIR "/NewDatabase2.kdbx"));
+    QByteArray dbData;
+    VERIFY(sourceDbFile.open(QIODevice::ReadOnly));
+    VERIFY(Tools::readAllFromDevice(&sourceDbFile, dbData));
+    sourceDbFile.close();
+
+    QTemporaryFile anotherFile;
+    VERIFY(anotherFile.open());
+    COMPARE(anotherFile.write(dbData), static_cast<qint64>(dbData.size()));
+    anotherFile.close();
+
+    m_tabWidget->addDatabaseTab(anotherFile.fileName(), false);
+    auto anotherWidget = m_tabWidget->currentDatabaseWidget();
+
+    auto service = enableService();
+    VERIFY(service);
+
+    // when there are multiple locked databases,
+    // repeatly show the dialog until there is at least one unlocked collection
+    FdoSecrets::settings()->setUnlockBeforeSearch(true);
+
+    // when only unlocking the one with no exposed group, a second dialog is shown
+    lockDatabaseInBackend();
+    {
+        bool unlockDialogWorks = false;
+        QTimer::singleShot(50, [&]() {
+            unlockDialogWorks = driveUnlockDialog(anotherWidget);
+            QTimer::singleShot(50, [&]() { unlockDialogWorks &= driveUnlockDialog(); });
+        });
+
+        DBUS_GET2(unlocked, locked, service->SearchItems({{"Title", "Sample Entry"}}));
+        VERIFY(unlockDialogWorks);
+        COMPARE(locked, {});
+        COMPARE(unlocked.size(), 1);
+    }
+
+    // when unlocking the one with exposed group, the other one remains locked
+    lockDatabaseInBackend();
+    {
+        bool unlockDialogWorks = false;
+        QTimer::singleShot(50, [&]() { unlockDialogWorks = driveUnlockDialog(m_dbWidget); });
+
+        DBUS_GET2(unlocked, locked, service->SearchItems({{"Title", "Sample Entry"}}));
+        VERIFY(unlockDialogWorks);
+        COMPARE(locked, {});
+        COMPARE(unlocked.size(), 1);
+        VERIFY(anotherWidget->isLocked());
     }
 }
 
@@ -606,6 +669,62 @@ void TestGuiFdoSecrets::testServiceUnlockItems()
         DBUS_GET(ss, item->GetSecret(QDBusObjectPath(sess->path())));
     }
     DBUS_COMPARE(item->locked(), false);
+}
+
+void TestGuiFdoSecrets::testServiceUnlockItemsIncludeFutureEntries()
+{
+    FdoSecrets::settings()->setConfirmAccessItem(true);
+
+    auto service = enableService();
+    VERIFY(service);
+    auto coll = getDefaultCollection(service);
+    VERIFY(coll);
+    auto item = getFirstItem(coll);
+    VERIFY(item);
+    auto sess = openSession(service, DhIetf1024Sha256Aes128CbcPkcs7::Algorithm);
+    VERIFY(sess);
+
+    DBUS_COMPARE(item->locked(), true);
+
+    {
+        DBUS_GET2(unlocked, promptPath, service->Unlock({QDBusObjectPath(item->path())}));
+        // nothing is unlocked immediately without user's action
+        COMPARE(unlocked, {});
+
+        auto prompt = getProxy<PromptProxy>(promptPath);
+        VERIFY(prompt);
+        QSignalSpy spyPromptCompleted(prompt.data(), SIGNAL(Completed(bool, QDBusVariant)));
+        VERIFY(spyPromptCompleted.isValid());
+
+        // nothing is unlocked yet
+        COMPARE(spyPromptCompleted.count(), 0);
+        DBUS_COMPARE(item->locked(), true);
+
+        // drive the prompt
+        DBUS_VERIFY(prompt->Prompt(""));
+        // remember and include future entries
+        VERIFY(driveAccessControlDialog(true, true));
+
+        VERIFY(waitForSignal(spyPromptCompleted, 1));
+        {
+            auto args = spyPromptCompleted.takeFirst();
+            COMPARE(args.size(), 2);
+            COMPARE(args.at(0).toBool(), false);
+            COMPARE(getSignalVariantArgument<QList<QDBusObjectPath>>(args.at(1)), {QDBusObjectPath(item->path())});
+        }
+
+        // unlocked
+        DBUS_COMPARE(item->locked(), false);
+    }
+
+    // check other entries are also unlocked
+    {
+        DBUS_GET(itemPaths, coll->items());
+        VERIFY(itemPaths.size() > 1);
+        auto anotherItem = getProxy<ItemProxy>(itemPaths.last());
+        VERIFY(anotherItem);
+        DBUS_COMPARE(anotherItem->locked(), false);
+    }
 }
 
 void TestGuiFdoSecrets::testServiceLock()
@@ -1035,6 +1154,31 @@ void TestGuiFdoSecrets::testItemCreate()
         DBUS_GET(unlocked, coll->SearchItems(attributes));
         VERIFY(unlocked.contains(QDBusObjectPath(item->path())));
     }
+}
+
+void TestGuiFdoSecrets::testItemCreateUnlock()
+{
+    auto service = enableService();
+    VERIFY(service);
+    auto coll = getDefaultCollection(service);
+    VERIFY(coll);
+    auto sess = openSession(service, DhIetf1024Sha256Aes128CbcPkcs7::Algorithm);
+    VERIFY(sess);
+
+    // NOTE: entries are no longer valid after locking
+    lockDatabaseInBackend();
+
+    QSignalSpy spyItemCreated(coll.data(), SIGNAL(ItemCreated(QDBusObjectPath)));
+    VERIFY(spyItemCreated.isValid());
+
+    // create item
+    StringStringMap attributes{
+        {"application", "fdosecrets-test"},
+        {"attr-i[bute]", "![some] -value*"},
+    };
+
+    auto item = createItem(sess, coll, "abc", "Password", attributes, false, false, true);
+    VERIFY(item);
 }
 
 void TestGuiFdoSecrets::testItemChange()
@@ -1508,9 +1652,42 @@ void TestGuiFdoSecrets::testModifyingExposedGroup()
     }
 }
 
+void TestGuiFdoSecrets::testNoExposeRecycleBin()
+{
+    // when the recycle bin is underneath the exposed group
+    // be careful not to expose entries in there
+
+    FdoSecrets::settings()->setExposedGroup(m_db, m_db->rootGroup()->uuid());
+    m_db->metadata()->setRecycleBinEnabled(true);
+
+    auto entry = m_db->rootGroup()->entries().first();
+    VERIFY(entry);
+    m_db->recycleEntry(entry);
+    processEvents();
+
+    auto service = enableService();
+    VERIFY(service);
+
+    auto coll = getDefaultCollection(service);
+    VERIFY(coll);
+
+    // exposing subgroup does not expose entries in other groups
+    DBUS_GET(itemPaths, coll->items());
+    QSet<Entry*> exposedEntries;
+    for (const auto& itemPath : itemPaths) {
+        exposedEntries << m_plugin->dbus()->pathToObject<Item>(itemPath)->backend();
+    }
+    VERIFY(!exposedEntries.contains(entry));
+
+    // searching should not return the entry
+    DBUS_GET2(unlocked, locked, service->SearchItems({{"Title", entry->title()}}));
+    COMPARE(locked, {});
+    COMPARE(unlocked, {});
+}
+
 void TestGuiFdoSecrets::lockDatabaseInBackend()
 {
-    m_dbWidget->lock();
+    m_tabWidget->lockDatabases();
     m_db.reset();
     processEvents();
 }
@@ -1588,7 +1765,8 @@ QSharedPointer<ItemProxy> TestGuiFdoSecrets::createItem(const QSharedPointer<Ses
                                                         const QString& pass,
                                                         const StringStringMap& attr,
                                                         bool replace,
-                                                        bool expectPrompt)
+                                                        bool expectPrompt,
+                                                        bool expectUnlockPrompt)
 {
     VERIFY(sess);
     VERIFY(coll);
@@ -1613,6 +1791,10 @@ QSharedPointer<ItemProxy> TestGuiFdoSecrets::createItem(const QSharedPointer<Ses
 
     // drive the prompt
     DBUS_VERIFY(prompt->Prompt(""));
+
+    bool unlockFound = driveUnlockDialog();
+    COMPARE(unlockFound, expectUnlockPrompt);
+
     bool found = driveAccessControlDialog();
     COMPARE(found, expectPrompt);
 
@@ -1635,7 +1817,7 @@ TestGuiFdoSecrets::encryptPassword(QByteArray value, QString contentType, const 
     return m_clientCipher->encrypt(ss.unmarshal(m_plugin->dbus())).marshal();
 }
 
-bool TestGuiFdoSecrets::driveAccessControlDialog(bool remember)
+bool TestGuiFdoSecrets::driveAccessControlDialog(bool remember, bool includeFutureEntries)
 {
     processEvents();
     for (auto w : QApplication::topLevelWidgets()) {
@@ -1647,7 +1829,13 @@ bool TestGuiFdoSecrets::driveAccessControlDialog(bool remember)
             auto rememberCheck = dlg->findChild<QCheckBox*>("rememberCheck");
             VERIFY(rememberCheck);
             rememberCheck->setChecked(remember);
-            dlg->done(AccessControlDialog::AllowSelected);
+
+            if (includeFutureEntries) {
+                dlg->done(AccessControlDialog::AllowAll);
+            } else {
+                dlg->done(AccessControlDialog::AllowSelected);
+            }
+
             processEvents();
             VERIFY(dlg->isHidden());
             return true;
@@ -1673,8 +1861,10 @@ bool TestGuiFdoSecrets::driveNewDatabaseWizard()
             COMPARE(wizard->currentId(), 2);
 
             // enter password
-            auto* passwordEdit = wizard->findChild<QLineEdit*>("enterPasswordEdit");
-            auto* passwordRepeatEdit = wizard->findChild<QLineEdit*>("repeatPasswordEdit");
+            auto* passwordEdit =
+                wizard->findChild<PasswordWidget*>("enterPasswordEdit")->findChild<QLineEdit*>("passwordEdit");
+            auto* passwordRepeatEdit =
+                wizard->findChild<PasswordWidget*>("repeatPasswordEdit")->findChild<QLineEdit*>("passwordEdit");
             VERIFY(passwordEdit);
             VERIFY(passwordRepeatEdit);
             QTest::keyClicks(passwordEdit, "test");
@@ -1697,12 +1887,17 @@ bool TestGuiFdoSecrets::driveNewDatabaseWizard()
     return ret;
 }
 
-bool TestGuiFdoSecrets::driveUnlockDialog()
+bool TestGuiFdoSecrets::driveUnlockDialog(DatabaseWidget* target)
 {
     processEvents();
     auto dbOpenDlg = m_tabWidget->findChild<DatabaseOpenDialog*>();
     VERIFY(dbOpenDlg);
-    auto editPassword = dbOpenDlg->findChild<QLineEdit*>("editPassword");
+    if (!dbOpenDlg->isVisible()) {
+        return false;
+    }
+    dbOpenDlg->setActiveDatabaseTab(target);
+
+    auto editPassword = dbOpenDlg->findChild<PasswordWidget*>("editPassword")->findChild<QLineEdit*>("passwordEdit");
     VERIFY(editPassword);
     editPassword->setFocus();
     QTest::keyClicks(editPassword, "a");

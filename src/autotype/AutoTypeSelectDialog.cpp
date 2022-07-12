@@ -35,6 +35,14 @@
 #include "gui/Clipboard.h"
 #include "gui/Icons.h"
 
+const auto MENU_FIELD_PROP_NAME = "menu_field";
+enum MENU_FIELD
+{
+    USERNAME = 1,
+    PASSWORD,
+    TOTP,
+};
+
 AutoTypeSelectDialog::AutoTypeSelectDialog(QWidget* parent)
     : QDialog(parent)
     , m_ui(new Ui::AutoTypeSelectDialog())
@@ -58,9 +66,11 @@ AutoTypeSelectDialog::AutoTypeSelectDialog(QWidget* parent)
         }
     });
 
+    m_ui->helpButton->setIcon(icons()->icon("system-help"));
+
     m_ui->search->installEventFilter(this);
 
-    m_searchTimer.setInterval(300);
+    m_searchTimer.setInterval(0);
     m_searchTimer.setSingleShot(true);
 
     connect(m_ui->search, SIGNAL(textChanged(QString)), &m_searchTimer, SLOT(start()));
@@ -69,7 +79,7 @@ AutoTypeSelectDialog::AutoTypeSelectDialog(QWidget* parent)
 
     m_ui->searchCheckBox->setShortcut(Qt::CTRL + Qt::Key_F);
     connect(m_ui->searchCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
-        Q_UNUSED(checked);
+        setDelayedSearch(checked);
         performSearch();
     });
 
@@ -105,6 +115,7 @@ void AutoTypeSelectDialog::setMatches(const QList<AutoTypeMatch>& matches,
 
     // always perform search when updating matches to refresh view
     performSearch();
+    setDelayedSearch(noMatches);
 }
 
 void AutoTypeSelectDialog::setSearchString(const QString& search)
@@ -113,12 +124,17 @@ void AutoTypeSelectDialog::setSearchString(const QString& search)
     m_ui->searchCheckBox->setChecked(true);
 }
 
+void AutoTypeSelectDialog::setDelayedSearch(bool state)
+{
+    m_searchTimer.setInterval(state ? 150 : 0);
+}
+
 void AutoTypeSelectDialog::submitAutoTypeMatch(AutoTypeMatch match)
 {
     if (match.first) {
         m_accepted = true;
         accept();
-        emit matchActivated(std::move(match));
+        emit matchActivated(std::move(match), m_virtualMode);
     }
 }
 
@@ -252,14 +268,22 @@ void AutoTypeSelectDialog::updateActionMenu(const AutoTypeMatch& match)
     bool hasPassword = !match.first->password().isEmpty();
     bool hasTotp = match.first->hasTotp();
 
-    auto actions = m_actionMenu->actions();
-    Q_ASSERT(actions.size() >= 6);
-    actions[0]->setEnabled(hasUsername);
-    actions[1]->setEnabled(hasPassword);
-    actions[2]->setEnabled(hasTotp);
-    actions[3]->setEnabled(hasUsername);
-    actions[4]->setEnabled(hasPassword);
-    actions[5]->setEnabled(hasTotp);
+    for (auto action : m_actionMenu->actions()) {
+        auto prop = action->property(MENU_FIELD_PROP_NAME);
+        if (prop.isValid()) {
+            switch (prop.toInt()) {
+            case MENU_FIELD::USERNAME:
+                action->setEnabled(hasUsername);
+                break;
+            case MENU_FIELD::PASSWORD:
+                action->setEnabled(hasPassword);
+                break;
+            case MENU_FIELD::TOTP:
+                action->setEnabled(hasTotp);
+                break;
+            }
+        }
+    }
 }
 
 void AutoTypeSelectDialog::buildActionMenu()
@@ -278,30 +302,52 @@ void AutoTypeSelectDialog::buildActionMenu()
     m_actionMenu->addAction(copyPasswordAction);
     m_actionMenu->addAction(copyTotpAction);
 
-    auto shortcut = new QShortcut(Qt::CTRL + Qt::Key_1, this);
-    connect(shortcut, &QShortcut::activated, typeUsernameAction, &QAction::trigger);
+    typeUsernameAction->setShortcut(Qt::CTRL + Qt::Key_1);
+    typeUsernameAction->setProperty(MENU_FIELD_PROP_NAME, MENU_FIELD::USERNAME);
     connect(typeUsernameAction, &QAction::triggered, this, [&] {
         auto match = m_ui->view->currentMatch();
         match.second = "{USERNAME}";
         submitAutoTypeMatch(match);
     });
 
-    shortcut = new QShortcut(Qt::CTRL + Qt::Key_2, this);
-    connect(shortcut, &QShortcut::activated, typePasswordAction, &QAction::trigger);
+    typePasswordAction->setShortcut(Qt::CTRL + Qt::Key_2);
+    typePasswordAction->setProperty(MENU_FIELD_PROP_NAME, MENU_FIELD::PASSWORD);
     connect(typePasswordAction, &QAction::triggered, this, [&] {
         auto match = m_ui->view->currentMatch();
         match.second = "{PASSWORD}";
         submitAutoTypeMatch(match);
     });
 
-    shortcut = new QShortcut(Qt::CTRL + Qt::Key_3, this);
-    connect(shortcut, &QShortcut::activated, typeTotpAction, &QAction::trigger);
+    typeTotpAction->setShortcut(Qt::CTRL + Qt::Key_3);
+    typeTotpAction->setProperty(MENU_FIELD_PROP_NAME, MENU_FIELD::TOTP);
     connect(typeTotpAction, &QAction::triggered, this, [&] {
         auto match = m_ui->view->currentMatch();
         match.second = "{TOTP}";
         submitAutoTypeMatch(match);
     });
 
+#ifdef Q_OS_WIN
+    auto typeVirtualAction = new QAction(icons()->icon("auto-type"), tr("Use Virtual Keyboard"));
+    m_actionMenu->insertAction(copyUsernameAction, typeVirtualAction);
+    typeVirtualAction->setShortcut(Qt::CTRL + Qt::Key_4);
+    connect(typeVirtualAction, &QAction::triggered, this, [&] {
+        m_virtualMode = true;
+        activateCurrentMatch();
+    });
+#endif
+
+#if QT_VERSION >= QT_VERSION_CHECK(5, 10, 0)
+    // Qt 5.10 introduced a new "feature" to hide shortcuts in context menus
+    // Unfortunately, Qt::AA_DontShowShortcutsInContextMenus is broken, have to manually enable them
+    typeUsernameAction->setShortcutVisibleInContextMenu(true);
+    typePasswordAction->setShortcutVisibleInContextMenu(true);
+    typeTotpAction->setShortcutVisibleInContextMenu(true);
+#ifdef Q_OS_WIN
+    typeVirtualAction->setShortcutVisibleInContextMenu(true);
+#endif
+#endif
+
+    copyUsernameAction->setProperty(MENU_FIELD_PROP_NAME, MENU_FIELD::USERNAME);
     connect(copyUsernameAction, &QAction::triggered, this, [&] {
         auto entry = m_ui->view->currentMatch().first;
         if (entry) {
@@ -309,6 +355,8 @@ void AutoTypeSelectDialog::buildActionMenu()
             reject();
         }
     });
+
+    copyPasswordAction->setProperty(MENU_FIELD_PROP_NAME, MENU_FIELD::PASSWORD);
     connect(copyPasswordAction, &QAction::triggered, this, [&] {
         auto entry = m_ui->view->currentMatch().first;
         if (entry) {
@@ -316,6 +364,8 @@ void AutoTypeSelectDialog::buildActionMenu()
             reject();
         }
     });
+
+    copyTotpAction->setProperty(MENU_FIELD_PROP_NAME, MENU_FIELD::TOTP);
     connect(copyTotpAction, &QAction::triggered, this, [&] {
         auto entry = m_ui->view->currentMatch().first;
         if (entry) {

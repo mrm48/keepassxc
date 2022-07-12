@@ -48,7 +48,7 @@ class MainWindow : public QMainWindow
 
 public:
     MainWindow();
-    ~MainWindow();
+    ~MainWindow() override;
 
     QList<DatabaseWidget*> getOpenDatabases();
     void restoreConfigState();
@@ -69,6 +69,8 @@ signals:
 public slots:
     void openDatabase(const QString& filePath, const QString& password = {}, const QString& keyfile = {});
     void appExit();
+    bool isHardwareKeySupported();
+    bool refreshHardwareKeys();
     void displayGlobalMessage(const QString& text,
                               MessageWidget::MessageType type,
                               bool showClosebutton = true,
@@ -134,7 +136,6 @@ private slots:
     void trayIconTriggered(QSystemTrayIcon::ActivationReason reason);
     void processTrayIconTrigger();
     void lockDatabasesAfterInactivity();
-    void forgetTouchIDAfterInactivity();
     void handleScreenLock();
     void showErrorMessage(const QString& message);
     void selectNextDatabaseTab();

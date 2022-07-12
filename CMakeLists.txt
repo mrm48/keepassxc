@@ -17,6 +17,7 @@
 cmake_minimum_required(VERSION 3.3.0)
 
 project(KeePassXC)
+set(APP_ID "org.keepassxc.${PROJECT_NAME}")
 
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING
@@ -33,6 +34,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 # Support Visual Studio Code
 include(CMakeToolsHelpers OPTIONAL)
 include(FeatureSummary)
+include(KPXCMacDeployHelpers)
 
 include(CheckCCompilerFlag)
 include(CheckCXXCompilerFlag)
@@ -58,9 +60,6 @@ option(WITH_XC_UPDATECHECK "Include automatic update checks; disable for control
 if(UNIX AND NOT APPLE)
     option(WITH_XC_FDOSECRETS "Implement freedesktop.org Secret Storage Spec server side API." OFF)
 endif()
-if(APPLE)
-    option(WITH_XC_TOUCHID "Include TouchID support for macOS." OFF)
-endif()
 option(WITH_XC_DOCS "Enable building of documentation" ON)
 
 if(WITH_CCACHE)
@@ -81,9 +80,6 @@ if(WITH_XC_ALL)
     set(WITH_XC_YUBIKEY ON)
     set(WITH_XC_SSHAGENT ON)
     set(WITH_XC_KEESHARE ON)
-    if(APPLE)
-        set(WITH_XC_TOUCHID ON)
-    endif()
     if(UNIX AND NOT APPLE)
         set(WITH_XC_FDOSECRETS ON)
     endif()
@@ -97,7 +93,7 @@ endif()
 
 set(KEEPASSXC_VERSION_MAJOR "2")
 set(KEEPASSXC_VERSION_MINOR "7")
-set(KEEPASSXC_VERSION_PATCH "0")
+set(KEEPASSXC_VERSION_PATCH "1")
 set(KEEPASSXC_VERSION "${KEEPASSXC_VERSION_MAJOR}.${KEEPASSXC_VERSION_MINOR}.${KEEPASSXC_VERSION_PATCH}")
 set(OVERRIDE_VERSION "" CACHE STRING "Override the KeePassXC Version for Snapshot builds")
 
@@ -123,7 +119,8 @@ execute_process(COMMAND git tag --points-at HEAD
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
         OUTPUT_VARIABLE GIT_TAG
         ERROR_QUIET)
-if(GIT_TAG)
+string(REGEX REPLACE "latest" "" GIT_TAG "${GIT_TAG}")
+if(GIT_TAG MATCHES "[0-9]+\.[0-9]+\.[0-9]+")
     string(STRIP "${GIT_TAG}" GIT_TAG)
     set(OVERRIDE_VERSION ${GIT_TAG})
 elseif(EXISTS ${CMAKE_SOURCE_DIR}/.version)
@@ -132,14 +129,14 @@ endif()
 
 string(REGEX REPLACE "(\r?\n)+" "" OVERRIDE_VERSION "${OVERRIDE_VERSION}")
 if(OVERRIDE_VERSION)
-    if(OVERRIDE_VERSION MATCHES "^[\\.0-9]+-(alpha|beta)[0-9]+$")
-        set(KEEPASSXC_BUILD_TYPE PreRelease)
+    if(OVERRIDE_VERSION MATCHES "^[\\.0-9]+-beta[0-9]*")
+        set(KEEPASSXC_BUILD_TYPE "PreRelease")
         set(KEEPASSXC_VERSION ${OVERRIDE_VERSION})
     elseif(OVERRIDE_VERSION MATCHES "^[\\.0-9]+$")
-        set(KEEPASSXC_BUILD_TYPE Release)
+        set(KEEPASSXC_BUILD_TYPE "Release")
         set(KEEPASSXC_VERSION ${OVERRIDE_VERSION})
     else()
-        set(KEEPASSXC_BUILD_TYPE Snapshot)
+        set(KEEPASSXC_BUILD_TYPE "Snapshot")
         set(KEEPASSXC_VERSION ${OVERRIDE_VERSION})
     endif()
 else()
@@ -163,11 +160,13 @@ message(STATUS "Setting up build for KeePassXC v${KEEPASSXC_VERSION}\n")
 # Distribution info
 set(KEEPASSXC_DIST ON)
 set(KEEPASSXC_DIST_TYPE "Other" CACHE STRING "KeePassXC Distribution Type")
-set_property(CACHE KEEPASSXC_DIST_TYPE PROPERTY STRINGS Snap AppImage Other)
+set_property(CACHE KEEPASSXC_DIST_TYPE PROPERTY STRINGS Snap AppImage Flatpak Other)
 if(KEEPASSXC_DIST_TYPE STREQUAL "Snap")
     set(KEEPASSXC_DIST_SNAP ON)
 elseif(KEEPASSXC_DIST_TYPE STREQUAL "AppImage")
     set(KEEPASSXC_DIST_APPIMAGE ON)
+elseif(KEEPASSXC_DIST_TYPE STREQUAL "Flatpak")
+    set(KEEPASSXC_DIST_FLATPAK ON)
 elseif(KEEPASSXC_DIST_TYPE STREQUAL "Other")
     unset(KEEPASSXC_DIST)
 endif()
@@ -250,6 +249,9 @@ macro(check_add_gcc_compiler_flag FLAG)
 endmacro(check_add_gcc_compiler_flag)
 
 add_definitions(-DQT_NO_EXCEPTIONS -DQT_STRICT_ITERATORS -DQT_NO_CAST_TO_ASCII)
+if(NOT IS_DEBUG_BUILD)
+    add_definitions(-DQT_NO_DEBUG_OUTPUT)
+endif()
 
 if(WITH_APP_BUNDLE)
     add_definitions(-DWITH_APP_BUNDLE)
@@ -481,6 +483,7 @@ if(APPLE)
         message(FATAL_ERROR "macdeployqt is required to build on macOS")
     endif()
     message(STATUS "Using macdeployqt: ${MACDEPLOYQT_EXE}")
+    set(MACDEPLOYQT_EXTRA_BINARIES "")
 elseif(WIN32)
     find_program(WINDEPLOYQT_EXE windeployqt HINTS ${Qt5_PREFIX}/bin ${Qt5_PREFIX}/tools/qt5/bin ENV PATH)
     if(NOT WINDEPLOYQT_EXE)
@@ -499,6 +502,10 @@ if(BOTAN2_VERSION VERSION_LESS "2.11.0")
     message(FATAL_ERROR "Botan2 2.11.0 or higher is required")
 endif()
 include_directories(SYSTEM ${BOTAN2_INCLUDE_DIR})
+# Find Argon2 -- Botan 2.18 and below does not support threaded Argon2
+find_library(ARGON2_LIBRARIES NAMES argon2)
+find_path(ARGON2_INCLUDE_DIR NAMES argon2.h PATH_SUFFIXES local/include)
+include_directories(SYSTEM ${ARGON2_INCLUDE_DIR})
 
 # Find zlib
 find_package(ZLIB REQUIRED)
@@ -522,7 +529,7 @@ if(UNIX)
             HAVE_MALLOC_H)
 
     check_cxx_source_compiles("#include <malloc.h>
-    int main() { malloc_usable_size(NULL, 0); return 0; }"
+    int main() { malloc_usable_size(NULL); return 0; }"
             HAVE_MALLOC_USABLE_SIZE)
 
     check_cxx_source_compiles("#include <sys/resource.h>

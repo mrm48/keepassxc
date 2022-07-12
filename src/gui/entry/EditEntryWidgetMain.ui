@@ -243,7 +243,7 @@
      </widget>
     </item>
     <item row="2" column="1">
-     <widget class="PasswordEdit" name="passwordEdit">
+     <widget class="PasswordWidget" name="passwordEdit">
       <property name="accessibleName">
        <string>Password field</string>
       </property>
@@ -297,21 +297,21 @@
  </widget>
  <customwidgets>
   <customwidget>
-   <class>PasswordEdit</class>
+   <class>PasswordWidget</class>
    <extends>QLineEdit</extends>
-   <header>gui/PasswordEdit.h</header>
+   <header>gui/PasswordWidget.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>TagsEdit</class>
+   <extends>QWidget</extends>
+   <header>gui/tag/TagsEdit.h</header>
    <container>1</container>
   </customwidget>
   <customwidget>
    <class>URLEdit</class>
    <extends>QLineEdit</extends>
    <header>gui/URLEdit.h</header>
-   <container>1</container>
-  </customwidget>
-  <customwidget>
-   <class>TagsEdit</class>
-   <extends>QAbstractScrollArea</extends>
-   <header>gui/tag/TagsEdit.h</header>
    <container>1</container>
   </customwidget>
  </customwidgets>

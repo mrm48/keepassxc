@@ -99,6 +99,7 @@ DatabaseWidget::DatabaseWidget(QSharedPointer<Database> db, QWidget* parent)
 
     // Setup tags view and place under groups
     auto tagModel = new TagModel(m_db);
+    m_tagView->setObjectName("tagView");
     m_tagView->setModel(tagModel);
     m_tagView->setFrameStyle(QFrame::NoFrame);
     m_tagView->setSelectionMode(QListView::SingleSelection);
@@ -111,9 +112,11 @@ DatabaseWidget::DatabaseWidget(QSharedPointer<Database> db, QWidget* parent)
     auto tagsLayout = new QVBoxLayout();
     auto tagsTitle = new QLabel(tr("Database Tags"));
     tagsTitle->setProperty("title", true);
+    tagsWidget->setObjectName("tagWidget");
     tagsWidget->setLayout(tagsLayout);
     tagsLayout->addWidget(tagsTitle);
     tagsLayout->addWidget(m_tagView);
+    tagsLayout->setMargin(0);
 
     m_groupSplitter->setOrientation(Qt::Vertical);
     m_groupSplitter->setChildrenCollapsible(true);
@@ -133,7 +136,7 @@ DatabaseWidget::DatabaseWidget(QSharedPointer<Database> db, QWidget* parent)
     rightHandSideWidget->setLayout(rightHandSideVBox);
     m_entryView = new EntryView(rightHandSideWidget);
 
-    m_mainSplitter->setChildrenCollapsible(false);
+    m_mainSplitter->setChildrenCollapsible(true);
     m_mainSplitter->addWidget(m_groupSplitter);
     m_mainSplitter->addWidget(rightHandSideWidget);
     m_mainSplitter->setStretchFactor(0, 30);
@@ -639,19 +642,19 @@ void DatabaseWidget::copyPassword()
     bool clearClipboard = config()->get(Config::Security_ClearClipboard).toBool();
 
     auto plainTextEdit = qobject_cast<QPlainTextEdit*>(focusWidget());
-    if (plainTextEdit) {
+    if (plainTextEdit && plainTextEdit->textCursor().hasSelection()) {
         clipboard()->setText(plainTextEdit->textCursor().selectedText(), clearClipboard);
         return;
     }
 
     auto label = qobject_cast<QLabel*>(focusWidget());
-    if (label) {
+    if (label && label->hasSelectedText()) {
         clipboard()->setText(label->selectedText(), clearClipboard);
         return;
     }
 
     auto textEdit = qobject_cast<QTextEdit*>(focusWidget());
-    if (textEdit) {
+    if (textEdit && textEdit->textCursor().hasSelection()) {
         clipboard()->setText(textEdit->textCursor().selectedText(), clearClipboard);
         return;
     }
@@ -779,9 +782,9 @@ void DatabaseWidget::performAutoType(const QString& sequence)
         }
 
         if (sequence.isEmpty()) {
-            autoType()->performAutoType(currentEntry, window());
+            autoType()->performAutoType(currentEntry);
         } else {
-            autoType()->performAutoTypeWithSequence(currentEntry, sequence, window());
+            autoType()->performAutoTypeWithSequence(currentEntry, sequence);
         }
     }
 }
@@ -896,7 +899,7 @@ void DatabaseWidget::openUrlForEntry(Entry* entry)
                                this);
             msgbox.setDefaultButton(QMessageBox::No);
 
-            QCheckBox* checkbox = new QCheckBox(tr("Remember my choice"), &msgbox);
+            auto checkbox = new QCheckBox(tr("Remember my choice"), &msgbox);
             msgbox.setCheckBox(checkbox);
             bool remember = false;
             QObject::connect(checkbox, &QCheckBox::stateChanged, [&](int state) {
@@ -1135,9 +1138,10 @@ void DatabaseWidget::loadDatabase(bool accepted)
             if (!expiredEntries.isEmpty()) {
                 m_entryView->displaySearch(expiredEntries);
                 m_entryView->setFirstEntryActive();
-                m_searchingLabel->setText(expirationOffset == 0
-                                              ? tr("Expired entries")
-                                              : tr("Entries expiring within %1 days").arg(expirationOffset));
+                m_searchingLabel->setText(
+                    expirationOffset == 0
+                        ? tr("Expired entries")
+                        : tr("Entries expiring within %1 day(s)", "", expirationOffset).arg(expirationOffset));
                 m_searchingLabel->setVisible(true);
             }
         }
@@ -1561,11 +1565,12 @@ Group* DatabaseWidget::currentGroup() const
 
 void DatabaseWidget::closeEvent(QCloseEvent* event)
 {
-    if (!isLocked() && !lock()) {
+    if (!lock() || m_databaseOpenWidget->unlockingDatabase()) {
         event->ignore();
         return;
     }
 
+    m_databaseOpenWidget->resetQuickUnlock();
     event->accept();
 }
 
@@ -1728,6 +1733,7 @@ void DatabaseWidget::reloadDatabaseFile()
     // Lock out interactions
     m_entryView->setDisabled(true);
     m_groupView->setDisabled(true);
+    m_tagView->setDisabled(true);
     QApplication::processEvents();
 
     QString error;
@@ -1773,6 +1779,7 @@ void DatabaseWidget::reloadDatabaseFile()
     // Return control
     m_entryView->setDisabled(false);
     m_groupView->setDisabled(false);
+    m_tagView->setDisabled(false);
 }
 
 int DatabaseWidget::numberOfSelectedEntries() const
@@ -1973,8 +1980,10 @@ bool DatabaseWidget::saveAs()
 
     QString oldFilePath = m_db->filePath();
     if (!QFileInfo::exists(oldFilePath)) {
+        QString defaultFileName = config()->get(Config::DefaultDatabaseFileName).toString();
         oldFilePath =
-            QDir::toNativeSeparators(config()->get(Config::LastDir).toString() + "/" + tr("Passwords").append(".kdbx"));
+            QDir::toNativeSeparators(config()->get(Config::LastDir).toString() + "/"
+                                     + (defaultFileName.isEmpty() ? tr("Passwords").append(".kdbx") : defaultFileName));
     }
     const QString newFilePath = fileDialog()->getSaveFileName(
         this, tr("Save database as"), oldFilePath, tr("KeePass 2 Database").append(" (*.kdbx)"), nullptr, nullptr);
@@ -2061,8 +2070,10 @@ bool DatabaseWidget::saveBackup()
     while (true) {
         QString oldFilePath = m_db->filePath();
         if (!QFileInfo::exists(oldFilePath)) {
-            oldFilePath = QDir::toNativeSeparators(config()->get(Config::LastDir).toString() + "/"
-                                                   + tr("Passwords").append(".kdbx"));
+            QString defaultFileName = config()->get(Config::DefaultDatabaseFileName).toString();
+            oldFilePath = QDir::toNativeSeparators(
+                config()->get(Config::LastDir).toString() + "/"
+                + (defaultFileName.isEmpty() ? tr("Passwords").append(".kdbx") : defaultFileName));
         }
 
         const QString newFilePath = fileDialog()->getSaveFileName(this,

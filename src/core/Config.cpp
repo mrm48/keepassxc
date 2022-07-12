@@ -78,9 +78,10 @@ static const QHash<Config::ConfigKey, ConfigDirective> configStrings = {
     {Config::AutoTypeHideExpiredEntry,{QS("AutoTypeHideExpiredEntry"), Roaming, false}},
     {Config::GlobalAutoTypeKey,{QS("GlobalAutoTypeKey"), Roaming, 0}},
     {Config::GlobalAutoTypeModifiers,{QS("GlobalAutoTypeModifiers"), Roaming, 0}},
+    {Config::GlobalAutoTypeRetypeTime,{QS("GlobalAutoTypeRetypeTime"), Roaming, 15}},
     {Config::FaviconDownloadTimeout,{QS("FaviconDownloadTimeout"), Roaming, 10}},
     {Config::UpdateCheckMessageShown,{QS("UpdateCheckMessageShown"), Roaming, false}},
-    {Config::UseTouchID,{QS("UseTouchID"), Roaming, false}},
+    {Config::DefaultDatabaseFileName,{QS("DefaultDatabaseFileName"), Roaming, {}}},
 
     {Config::LastDatabases, {QS("LastDatabases"), Local, {}}},
     {Config::LastKeyFiles, {QS("LastKeyFiles"), Local, {}}},
@@ -93,7 +94,6 @@ static const QHash<Config::ConfigKey, ConfigDirective> configStrings = {
     {Config::GUI_Language, {QS("GUI/Language"), Roaming, QS("system")}},
     {Config::GUI_HideToolbar, {QS("GUI/HideToolbar"), Roaming, false}},
     {Config::GUI_MovableToolbar, {QS("GUI/MovableToolbar"), Roaming, false}},
-    {Config::GUI_HideGroupsPanel, {QS("GUI/HideGroupsPanel"), Roaming, false}},
     {Config::GUI_HidePreviewPanel, {QS("GUI/HidePreviewPanel"), Roaming, false}},
     {Config::GUI_AlwaysOnTop, {QS("GUI/GUI_AlwaysOnTop"), Local, false}},
     {Config::GUI_ToolButtonStyle, {QS("GUI/ToolButtonStyle"), Roaming, Qt::ToolButtonIconOnly}},
@@ -140,11 +140,9 @@ static const QHash<Config::ConfigKey, ConfigDirective> configStrings = {
     {Config::Security_HidePasswordPreviewPanel, {QS("Security/HidePasswordPreviewPanel"), Roaming, true}},
     {Config::Security_AutoTypeAsk, {QS("Security/AutotypeAsk"), Roaming, true}},
     {Config::Security_IconDownloadFallback, {QS("Security/IconDownloadFallback"), Roaming, false}},
-    {Config::Security_ResetTouchId, {QS("Security/ResetTouchId"), Roaming, false}},
-    {Config::Security_ResetTouchIdTimeout, {QS("Security/ResetTouchIdTimeout"), Roaming, 30}},
-    {Config::Security_ResetTouchIdScreenlock,{QS("Security/ResetTouchIdScreenlock"), Roaming, true}},
     {Config::Security_NoConfirmMoveEntryToRecycleBin,{QS("Security/NoConfirmMoveEntryToRecycleBin"), Roaming, true}},
     {Config::Security_EnableCopyOnDoubleClick,{QS("Security/EnableCopyOnDoubleClick"), Roaming, false}},
+    {Config::Security_QuickUnlock, {QS("Security/QuickUnlock"), Local, true}},
 
     // Browser
     {Config::Browser_Enabled, {QS("Browser/Enabled"), Roaming, false}},
@@ -173,7 +171,7 @@ static const QHash<Config::ConfigKey, ConfigDirective> configStrings = {
     // SSHAgent
     {Config::SSHAgent_Enabled, {QS("SSHAgent/Enabled"), Roaming, false}},
     {Config::SSHAgent_UseOpenSSH, {QS("SSHAgent/UseOpenSSH"), Roaming, false}},
-    {Config::SSHAgent_UsePageant, {QS("SSHAgent/UsePageant"), Roaming, false} },
+    {Config::SSHAgent_UsePageant, {QS("SSHAgent/UsePageant"), Roaming, true} },
     {Config::SSHAgent_AuthSockOverride, {QS("SSHAgent/AuthSockOverride"), Local, {}}},
     {Config::SSHAgent_SecurityKeyProviderOverride, {QS("SSHAgent/SecurityKeyProviderOverride"), Local, {}}},
 
@@ -329,9 +327,6 @@ static const QHash<QString, Config::ConfigKey> deprecationMap = {
     {QS("security/HidePasswordPreviewPanel"), Config::Security_HidePasswordPreviewPanel},
     {QS("security/passwordsrepeat"), Config::Security_PasswordsRepeatVisible},
     {QS("security/hidenotes"), Config::Security_HideNotes},
-    {QS("security/resettouchid"), Config::Security_ResetTouchId},
-    {QS("security/resettouchidtimeout"), Config::Security_ResetTouchIdTimeout},
-    {QS("security/resettouchidscreenlock"), Config::Security_ResetTouchIdScreenlock},
     {QS("KeeShare/Settings.own"), Config::KeeShare_Own},
     {QS("KeeShare/Settings.foreign"), Config::KeeShare_Foreign},
     {QS("KeeShare/Settings.active"), Config::KeeShare_Active},
@@ -365,10 +360,15 @@ static const QHash<QString, Config::ConfigKey> deprecationMap = {
     {QS("GUI/DarkTrayIcon"), Config::Deleted},
 
     // 2.7.0
+    {QS("GUI/HideGroupsPanel"), Config::Deleted},
     {QS("LastAttachmentDir"), Config::Deleted},
     {QS("KeeShare/LastDir"), Config::Deleted},
     {QS("KeeShare/LastKeyDir"), Config::Deleted},
-    {QS("KeeShare/LastShareDir"), Config::Deleted}};
+    {QS("KeeShare/LastShareDir"), Config::Deleted},
+    {QS("UseTouchID"), Config::Deleted},
+    {QS("Security/ResetTouchId"), Config::Deleted},
+    {QS("Security/ResetTouchIdTimeout"), Config::Deleted},
+    {QS("Security/ResetTouchIdScreenlock"), Config::Deleted}};
 
 /**
  * Migrate settings from previous versions.

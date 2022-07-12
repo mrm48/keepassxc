@@ -1,9 +1,9 @@
-= KeePassXC - SSH Agent
+= KeePassXC - SSH Agent integration
 include::.sharedheader[]
 :imagesdir: ../images
 
 // tag::content[]
-== SSH Agent
+== SSH Agent integration
 SSH (Secure Shell) is a widely used remote secure shell protocol and is considered an industry standard for secure remote access to UNIX-like systems including Linux, BSDs, macOS and more recently even Windows received native support. SSH supports multiple types of authentication and the most widely used ones are either interactive keyboard input with a password or a public-key cryptography pair of keys.
 
 KeePassXC SSH Agent integration is built to manage SSH keys in a secure manner by either storing them completely within your KeePassXC database or by having only the decryption key of a key file that is stored elsewhere. SSH Agent integration _does not_ provide an agent itself but works as a client for any agent implementation that is OpenSSH compatible.
@@ -74,7 +74,7 @@ image::sshagent_application_settings.png[]
 On the settings page you can enable the integration by checking _Enable SSH Agent integration_.
 When the integration is enabled coming back to the settings page also shows if connection to the agent is working.
 
-On Windows you have the option to select between _Pageant_ and _OpenSSH for Windows_ and on other platforms the settings page shows the current value of _SSH_AUTH_SOCK_ environment variable which is used to connect to the running agent and an option to manually override the automatically detected path.
+On Windows, you have the option to select _Pageant_ and/or _OpenSSH for Windows_. On macOS and Linux, the system ssh-agent will be used automatically and the settings page shows the current value of _SSH_AUTH_SOCK_ environment variable which is used to connect to the running agent and an option to manually override the automatically detected path.
 
 If the value of _SSH_AUTH_SOCK_ is empty it means the agent is not properly configured and KeePassXC will be unable to connect to it unless you provide a static override path to the socket.
 

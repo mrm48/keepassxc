@@ -169,13 +169,13 @@ namespace FdoSecrets
         QVariant currentResult() const override;
 
         void collectionUnlockFinished(bool accepted);
-        void itemUnlockFinished(const QHash<Entry*, AuthDecision>& results);
+        void itemUnlockFinished(const QHash<Entry*, AuthDecision>& results, AuthDecision forFutureEntries);
         void unlockItems();
-
-        static constexpr auto FdoSecretsBackend = "FdoSecretsBackend";
 
         QList<QPointer<Collection>> m_collections;
         QHash<Collection*, QList<QPointer<Item>>> m_items;
+        QHash<QUuid, Item*> m_entryToItems;
+
         QList<QDBusObjectPath> m_unlocked;
         int m_numRejected = 0;
 
@@ -211,6 +211,7 @@ namespace FdoSecrets
         PromptResult promptSync(const DBusClientPtr& client, const QString& windowId) override;
         QVariant currentResult() const override;
 
+        DBusResult createItem(const QString& windowId);
         DBusResult updateItem();
 
         QPointer<Collection> m_coll;

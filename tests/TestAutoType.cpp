@@ -140,7 +140,7 @@ void TestAutoType::testInternal()
 
 void TestAutoType::testSingleAutoType()
 {
-    m_autoType->performAutoType(m_entry1, nullptr);
+    m_autoType->performAutoType(m_entry1);
 
     QCOMPARE(m_test->actionCount(), 14);
     QCOMPARE(m_test->actionChars(),
@@ -337,7 +337,7 @@ void TestAutoType::testAutoTypeSyntaxChecks()
     QVERIFY2(AutoType::verifyAutoTypeSyntax("{S:FOO}{S:HELLO WORLD}", entry, error), error.toLatin1());
     QVERIFY2(!AutoType::verifyAutoTypeSyntax("{S:SPECIAL_TOKEN{}}", entry, error), error.toLatin1());
 
-    QVERIFY2(!AutoType::verifyAutoTypeSyntax("{BEEP 3 3}", entry, error), error.toLatin1());
+    QVERIFY2(AutoType::verifyAutoTypeSyntax("{BEEP 3 3}", entry, error), error.toLatin1());
     QVERIFY2(AutoType::verifyAutoTypeSyntax("{BEEP 3}", entry, error), error.toLatin1());
 
     QVERIFY2(AutoType::verifyAutoTypeSyntax("{VKEY 0x01}", entry, error), error.toLatin1());
